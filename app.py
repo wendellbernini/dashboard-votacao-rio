@@ -4,7 +4,13 @@ import pydeck as pdk
 import geopandas as gpd
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(layout="wide")
+
+st.set_page_config(
+    page_title="Análise Interativa de Votação - Município do Rio de Janeiro",
+    page_icon="📈",
+    layout="wide",
+)
+
 st.title("Análise Interativa de Votação - Município do Rio de Janeiro")
 
 # --- CONSTANTES ---
