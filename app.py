@@ -61,12 +61,9 @@ def carregar_dados():
     )
     gdf_bairros = gdf_bairros.to_crs(gdf_votacao.crs)
     gdf_merged = gpd.sjoin(gdf_votacao, gdf_bairros, how="left", predicate='intersects')
-    df_com_bairro = pd.DataFrame(gdf_merged.drop(columns=['geometry', 'index_right']))
     
-    # --- CORREÇÃO APLICADA AQUI ---
-    # A coluna de nome do bairro no GeoJSON da prefeitura é 'nome' (minúsculas).
+    df_com_bairro = pd.DataFrame(gdf_merged.drop(columns=['geometry', 'index_right']))
     df_com_bairro.rename(columns={'nome': 'NOME_BAIRRO'}, inplace=True)
-    # --- FIM DA CORREÇÃO ---
 
     gdf_estado = gpd.read_file(URL_GEOJSON_ESTADO_RIO)
     gdf_municipio = gdf_estado[gdf_estado['name'] == 'Rio de Janeiro']
@@ -98,13 +95,8 @@ if modo_analise == "Apenas Fernando Paes":
 elif modo_analise == "Apenas Índia Armelau":
     df_pre_filtro = df_original[df_original[COLUNA_CANDIDATO] == NOME_INDIA]
 elif modo_analise == "Comparativo (Locais em Comum)":
-    # Garante que NOME_BAIRRO existe antes de usar no groupby
-    if 'NOME_BAIRRO' in df_original.columns:
-        locais_comuns = df_original.groupby('NM_LOCAL_VOTACAO').filter(lambda x: len(x[COLUNA_CANDIDATO].unique()) == 2)['NM_LOCAL_VOTACAO'].unique()
-        df_pre_filtro = df_original[df_original['NM_LOCAL_VOTACAO'].isin(locais_comuns)]
-    else: # Fallback caso o merge de bairros falhe por algum motivo
-        st.warning("Coluna 'NOME_BAIRRO' não encontrada. Análise comparativa pode estar incompleta.")
-        df_pre_filtro = df_original.copy()
+    locais_comuns = df_original.groupby('NM_LOCAL_VOTACAO').filter(lambda x: len(x[COLUNA_CANDIDATO].unique()) == 2)['NM_LOCAL_VOTACAO'].unique()
+    df_pre_filtro = df_original[df_original['NM_LOCAL_VOTACAO'].isin(locais_comuns)]
 
 
 with filt_col2:
@@ -126,7 +118,7 @@ st.divider()
 
 # --- PRÉ-CÁLCULO DOS DADOS PARA O MAPA DE PONTOS ---
 df_mapa = pd.DataFrame()
-if not df_filtrado.empty:
+if not df_filtrado.empty and 'NOME_BAIRRO' in df_filtrado.columns:
     if modo_analise in ["Apenas Fernando Paes", "Apenas Índia Armelau"]:
         df_mapa = df_filtrado[['NM_LOCAL_VOTACAO', 'lat', 'lon', 'QT_VOTOS_TOTAL']].copy()
         df_mapa.rename(columns={'QT_VOTOS_TOTAL': 'Votos_Candidato_Unico'}, inplace=True)
@@ -150,93 +142,113 @@ map_col, legend_col = st.columns([4, 1])
 
 with legend_col:
     st.header("Legenda do Mapa")
-    tipos_vis_disponiveis = ("Pontos", "Mapa de Calor")
-    if modo_analise in ["Comparativo (Locais em Comum)", "Visão Geral (Ambos)"]:
-        tipos_vis_disponiveis = ("Pontos", "Mapa de Calor", "Por Bairro")
-
     tipo_visualizacao = st.radio(
         "Tipo de Visualização:",
-        tipos_vis_disponiveis,
+        ("Pontos", "Mapa de Calor", "Por Bairro"),
         index=0,
         help="'Pontos': vencedor por local. 'Mapa de Calor': concentração de votos. 'Por Bairro': vencedor por bairro."
     )
     st.divider()
 
     if tipo_visualizacao == "Por Bairro":
-        st.markdown("**Vencedor no Bairro:**")
-        st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: {COR_FERNANDO}; border-radius: 5px; margin-right: 10px;"></div><span>Fernando Paes</span></div>', unsafe_allow_html=True)
-        st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 15px;"><div style="width: 20px; height: 20px; background-color: {COR_INDIA}; border-radius: 5px; margin-right: 10px;"></div><span>Índia Armelau</span></div>', unsafe_allow_html=True)
-        st.markdown("**Intensidade da Cor:**<p style='font-size: 0.9em;'>Quanto mais <b>forte</b> a cor, <b>maior</b> a diferença de votos no bairro.</p>", unsafe_allow_html=True)
+        if modo_analise in ["Comparativo (Locais em Comum)", "Visão Geral (Ambos)"]:
+            st.markdown("**Disputa no Bairro:**")
+            st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: {COR_FERNANDO}; border-radius: 5px; margin-right: 10px;"></div><span>Vitória de F. Paes</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 15px;"><div style="width: 20px; height: 20px; background-color: {COR_INDIA}; border-radius: 5px; margin-right: 10px;"></div><span>Vitória de Í. Armelau</span></div>', unsafe_allow_html=True)
+            st.markdown("**Intensidade da Cor:**<p style='font-size: 0.9em;'>Quanto mais <b>forte</b> a cor, <b>mais equilibrada</b> (menor diferença percentual) foi a votação no bairro.</p>", unsafe_allow_html=True)
+        else:
+            candidato_selecionado = "Fernando Paes" if modo_analise == "Apenas Fernando Paes" else "Índia Armelau"
+            cor_base_html = COR_FERNANDO if candidato_selecionado == "Fernando Paes" else COR_INDIA
+            st.markdown(f"**Concentração de Votos:**")
+            st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: {cor_base_html}; border-radius: 5px; margin-right: 10px;"></div><span>Votos de {candidato_selecionado}</span></div>', unsafe_allow_html=True)
+            st.markdown("**Intensidade da Cor:**<p style='font-size: 0.9em;'>Quanto mais <b>forte</b> a cor, <b>maior</b> o número absoluto de votos para o candidato no bairro.</p>", unsafe_allow_html=True)
 
     elif tipo_visualizacao == "Pontos" and not df_mapa.empty:
         if modo_analise in ["Apenas Fernando Paes", "Apenas Índia Armelau"]:
             candidato_selecionado = "Fernando Paes" if modo_analise == "Apenas Fernando Paes" else "Índia Armelau"
-            cor_base_html = COR_FERNANDO if modo_analise == "Apenas Fernando Paes" else COR_INDIA
+            cor_base_html = COR_FERNANDO if candidato_selecionado == "Fernando Paes" else COR_INDIA
             st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: {cor_base_html}; border-radius: 50%; margin-right: 10px;"></div><span>{candidato_selecionado}</span></div>', unsafe_allow_html=True)
-            st.markdown("**Intensidade:**<p style='font-size: 0.9em;'>Quanto mais <b>forte</b> a cor, <b>maior</b> o número de votos.</p>", unsafe_allow_html=True)
-            st.markdown("**Tamanho do Círculo:**<p style='font-size: 0.9em;'>Quanto <b>maior</b> o círculo, <b>maior</b> o número de votos.</p>", unsafe_allow_html=True)
         else:
             modo_cor = st.radio("Colorir pontos por:", ("Sinergia (Relativa %)", "Sinergia (Absoluta)", "Magnitude da Vitória", "Volume de Votos (Ponderado)"))
-            st.markdown("**Vencedor no Local:**")
             st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: {COR_FERNANDO}; border-radius: 50%; margin-right: 10px;"></div><span>Fernando Paes</span></div>', unsafe_allow_html=True)
             st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 15px;"><div style="width: 20px; height: 20px; background-color: {COR_INDIA}; border-radius: 50%; margin-right: 10px;"></div><span>Índia Armelau</span></div>', unsafe_allow_html=True)
-            if modo_cor == "Sinergia (Relativa %)": st.markdown("**Intensidade:**<p style='font-size: 0.9em;'>Quanto mais <b>forte</b> a cor, <b>menor</b> a diferença <b>percentual</b> de votos.</p>", unsafe_allow_html=True)
-            elif modo_cor == "Sinergia (Absoluta)": st.markdown("**Intensidade:**<p style='font-size: 0.9em;'>Quanto mais <b>forte</b> a cor, <b>menor</b> a diferença <b>absoluta</b> de votos.</p>", unsafe_allow_html=True)
-            elif modo_cor == "Magnitude da Vitória": st.markdown("**Intensidade:**<p style='font-size: 0.9em;'>Quanto mais <b>forte</b> a cor, <b>maior</b> a diferença de votos.</p>", unsafe_allow_html=True)
-            else: st.markdown("**Intensidade:**<p style='font-size: 0.9em;'>Quanto mais <b>forte</b> o azul, <b>maior</b> o volume total de votos.</p>", unsafe_allow_html=True)
-            st.markdown("**Tamanho do Círculo:**<p style='font-size: 0.9em;'>Quanto <b>maior</b> o círculo, <b>maior</b> o número total de votos no local.</p>", unsafe_allow_html=True)
 
     elif tipo_visualizacao == "Mapa de Calor":
         if modo_analise in ["Apenas Fernando Paes", "Apenas Índia Armelau"]:
             candidato_selecionado = "Fernando Paes" if modo_analise == "Apenas Fernando Paes" else "Índia Armelau"
             st.markdown(f"O mapa de calor visualiza a **concentração de votos** de **{candidato_selecionado}**.")
-            st.markdown(f"**Intensidade do Calor:**<p style='font-size: 0.9em;'>Quanto mais <b>quente</b> (vermelho/amarelo), maior o <b>número de votos absolutos</b> para {candidato_selecionado} na área.</p>", unsafe_allow_html=True)
         else:
             st.markdown("O mapa de calor visualiza a **sinergia** de votos.")
-            st.markdown("""**Intensidade do Calor:**<p style='font-size: 0.9em;'>Quanto mais <b>quente</b> (vermelho/amarelo), maior a concentração de locais com <b>alto volume total de votos</b> E com <b>votação equilibrada</b> entre os dois candidatos. Áreas com vitória esmagadora de um candidato são "esfriadas".</p>""", unsafe_allow_html=True)
 
 # --- RENDERIZAÇÃO DO MAPA ---
 with map_col:
     view_state = pdk.ViewState(latitude=-22.9068, longitude=-43.1729, zoom=9.5, pitch=0)
     polygon_layer = pdk.Layer("GeoJsonLayer", data=municipio_rj_geo, get_fill_color="[220, 220, 220, 40]", get_line_color="[0, 0, 0, 100]", get_line_width=30)
 
-    if not df_filtrado.empty:
-        # --- BLOCO DE RENDERIZAÇÃO DO MAPA DE BAIRROS CORRIGIDO ---
+    if not df_filtrado.empty and 'NOME_BAIRRO' in df_filtrado.columns:
         if tipo_visualizacao == "Por Bairro":
-            df_bairros_agg = df_filtrado.pivot_table(index='NOME_BAIRRO', columns=COLUNA_CANDIDATO, values='QT_VOTOS_TOTAL', aggfunc='sum').fillna(0)
-            if NOME_FERNANDO not in df_bairros_agg: df_bairros_agg[NOME_FERNANDO] = 0
-            if NOME_INDIA not in df_bairros_agg: df_bairros_agg[NOME_INDIA] = 0
+            if modo_analise in ["Comparativo (Locais em Comum)", "Visão Geral (Ambos)"]:
+                df_bairros_agg = df_filtrado.pivot_table(index='NOME_BAIRRO', columns=COLUNA_CANDIDATO, values='QT_VOTOS_TOTAL', aggfunc='sum').fillna(0)
+                if NOME_FERNANDO not in df_bairros_agg: df_bairros_agg[NOME_FERNANDO] = 0
+                if NOME_INDIA not in df_bairros_agg: df_bairros_agg[NOME_INDIA] = 0
+                df_bairros_agg[NOME_FERNANDO] = df_bairros_agg[NOME_FERNANDO].astype(int)
+                df_bairros_agg[NOME_INDIA] = df_bairros_agg[NOME_INDIA].astype(int)
+                df_bairros_agg['Diferenca'] = df_bairros_agg[NOME_FERNANDO] - df_bairros_agg[NOME_INDIA]
+                df_bairros_agg['Total_Votos'] = df_bairros_agg[NOME_FERNANDO] + df_bairros_agg[NOME_INDIA]
+                df_bairros_agg['Diferenca_Absoluta'] = df_bairros_agg['Diferenca'].abs()
+                epsilon = 1e-9
+                df_bairros_agg['Sinergia'] = 1 - (df_bairros_agg['Diferenca_Absoluta'] / (df_bairros_agg['Total_Votos'] + epsilon))
 
-            df_bairros_agg[NOME_FERNANDO] = df_bairros_agg[NOME_FERNANDO].astype(int)
-            df_bairros_agg[NOME_INDIA] = df_bairros_agg[NOME_INDIA].astype(int)
-            df_bairros_agg['Diferenca'] = df_bairros_agg[NOME_FERNANDO] - df_bairros_agg[NOME_INDIA]
+                gdf_bairros_plot = bairros_rj_geo.merge(df_bairros_agg, left_on='nome', right_index=True, how='left').fillna(0)
+                
+                # --- CORREÇÃO: LÓGICA DE NORMALIZAÇÃO DA COR ---
+                bairros_com_votos = gdf_bairros_plot[gdf_bairros_plot['Total_Votos'] > 0]
+                min_sinergia = bairros_com_votos['Sinergia'].min()
+                max_sinergia = bairros_com_votos['Sinergia'].max()
+                range_sinergia = max_sinergia - min_sinergia if max_sinergia > min_sinergia else 1.0
 
-            # CORREÇÃO: Usa left_on='nome' para juntar com o GeoDataFrame dos bairros
-            gdf_bairros_plot = bairros_rj_geo.merge(df_bairros_agg, left_on='nome', right_index=True, how='left').fillna(0)
-            max_diff_abs = gdf_bairros_plot['Diferenca'].abs().max() or 1
+                def get_bairro_color_comparativo(row):
+                    base_color = RGB_FERNANDO if row['Diferenca'] > 0 else RGB_INDIA
+                    if row['Total_Votos'] > 0:
+                        normalized_sinergia = (row['Sinergia'] - min_sinergia) / range_sinergia
+                        # Usa uma potência para dar mais peso visual às diferenças
+                        adjusted_sinergia = normalized_sinergia ** 0.75
+                        alpha = int(50 + adjusted_sinergia * 205)
+                    else:
+                        alpha = 20
+                    return base_color + [alpha]
+                # --- FIM DA CORREÇÃO ---
 
-            def get_bairro_color(diff):
-                alpha = 50 + int((abs(diff) / max_diff_abs) * 205) if max_diff_abs > 0 else 50
-                if diff > 0: return RGB_FERNANDO + [alpha]
-                if diff < 0: return RGB_INDIA + [alpha]
-                return [200, 200, 200, 50]
+                gdf_bairros_plot['cor'] = gdf_bairros_plot.apply(get_bairro_color_comparativo, axis=1)
+                gdf_bairros_plot['tooltip'] = gdf_bairros_plot.apply(
+                    lambda r: f"<b>Bairro: {r['nome']}</b><br>"
+                            f"F. Paes: {int(r[NOME_FERNANDO])}<br>"
+                            f"Í. Armelau: {int(r[NOME_INDIA])}<br>"
+                            f"<b>Diferença: {int(r['Diferenca'])}</b><br>"
+                            f"<i>Sinergia: {r['Sinergia']:.1%}</i>", axis=1)
+            else:
+                candidato_selecionado = NOME_FERNANDO if modo_analise == "Apenas Fernando Paes" else NOME_INDIA
+                cor_base_rgb = RGB_FERNANDO if modo_analise == "Apenas Fernando Paes" else RGB_INDIA
+                
+                df_bairros_agg = df_filtrado.groupby('NOME_BAIRRO')['QT_VOTOS_TOTAL'].sum().reset_index()
+                gdf_bairros_plot = bairros_rj_geo.merge(df_bairros_agg, left_on='nome', right_on='NOME_BAIRRO', how='left').fillna(0)
+                max_votos_bairro = gdf_bairros_plot['QT_VOTOS_TOTAL'].max() or 1
+                
+                def get_bairro_color_unico(votos):
+                    alpha = 50 + int((votos / max_votos_bairro) * 205)
+                    return cor_base_rgb + [alpha]
 
-            gdf_bairros_plot['cor'] = gdf_bairros_plot['Diferenca'].apply(get_bairro_color)
-            
-            # CORREÇÃO: Usa r['nome'] para buscar o nome do bairro para o tooltip
-            gdf_bairros_plot['tooltip'] = gdf_bairros_plot.apply(
-                lambda r: f"<b>Bairro: {r['nome']}</b><br>"
-                          f"F. Paes: {int(r[NOME_FERNANDO])}<br>"
-                          f"Í. Armelau: {int(r[NOME_INDIA])}<br>"
-                          f"<b>Diferença: {int(r['Diferenca'])}</b>", axis=1)
+                gdf_bairros_plot['cor'] = gdf_bairros_plot['QT_VOTOS_TOTAL'].apply(get_bairro_color_unico)
+                gdf_bairros_plot['tooltip'] = gdf_bairros_plot.apply(
+                    lambda r: f"<b>Bairro: {r['nome']}</b><br>"
+                            f"Votos: {int(r['QT_VOTOS_TOTAL'])}", axis=1)
 
             bairro_layer = pdk.Layer(
                 "GeoJsonLayer", data=gdf_bairros_plot, opacity=0.7, pickable=True,
                 get_fill_color='cor', get_line_color=[0, 0, 0, 100], get_line_width=15,
             )
             st.pydeck_chart(pdk.Deck(layers=[polygon_layer, bairro_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT, tooltip={"html": "{tooltip}"}))
-        # --- FIM DO BLOCO CORRIGIDO ---
-
+        
         elif tipo_visualizacao == "Pontos":
             if modo_analise in ["Apenas Fernando Paes", "Apenas Índia Armelau"]:
                 max_votos_unico = df_mapa['Votos_Candidato_Unico'].max() or 1
@@ -276,7 +288,7 @@ with map_col:
             st.pydeck_chart(pdk.Deck(layers=[polygon_layer, heatmap_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT))
     else:
         st.pydeck_chart(pdk.Deck(layers=[polygon_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT))
-        st.info("Nenhum dado de votação para exibir no mapa com os filtros atuais.")
+        st.info("Nenhum dado para exibir no mapa com os filtros atuais.")
 
 # --- SEÇÃO DE ANÁLISE DETALHADA ---
 st.divider()
