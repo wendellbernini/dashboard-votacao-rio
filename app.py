@@ -19,12 +19,13 @@ NOME_FERNANDO = 'FERNANDO CESAR CAMPOS PAES'
 NOME_INDIA = 'AMANDA BRANDAO ARMELAU'
 URL_GEOJSON_ESTADO_RIO = "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-33-mun.json"
 URL_GEOJSON_BAIRROS_RIO = "https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/4/query?where=1%3D1&outFields=*&outSR=4326&f=geojson"
-COR_FERNANDO = "#008000"  # Verde
-COR_INDIA = "#FFA500"     # Laranja
-RGB_FERNANDO = [0, 128, 0]
-RGB_INDIA = [255, 165, 0]
+COR_FERNANDO = "#1E90FF"  # Azul
+COR_INDIA = "#FF0000"     # Vermelho
+RGB_FERNANDO = [30, 144, 255]
+RGB_INDIA = [255, 0, 0]
 
 
+# --- FUNÇÕES AUXILIARES ---
 # --- FUNÇÕES AUXILIARES ---
 @st.cache_data
 def carregar_dados():
@@ -40,11 +41,14 @@ def carregar_dados():
             is_neg = s.startswith('-')
             digits = ''.join(filter(str.isdigit, s))
             if not digits: return None
-            if len(digits) > 7:
-                s_clean = f"{'-' if is_neg else ''}{digits[:2]}.{digits[2:]}"
+            # Ajuste para diferentes formatos de coordenadas sem ponto decimal
+            s_clean = f"{'-' if is_neg else ''}{s.replace('-', '').replace('.', '')}"
+            if len(s_clean) > 8: # Provavelmente formato com muitos decimais
+                 s_clean = f"{s_clean[:3]}.{s_clean[3:]}"
             else:
-                s_clean = f"{'-' if is_neg else ''}{digits[:3]}.{digits[3:]}"
+                 s_clean = f"{s_clean[:2]}.{s_clean[2:]}"
             return pd.to_numeric(s_clean, errors='coerce')
+
 
     df = pd.read_csv('votacao_com_coordenadas.csv', sep=';', encoding='utf-8-sig', on_bad_lines='skip')
     df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
@@ -64,6 +68,11 @@ def carregar_dados():
     
     df_com_bairro = pd.DataFrame(gdf_merged.drop(columns=['geometry', 'index_right']))
     df_com_bairro.rename(columns={'nome': 'NOME_BAIRRO'}, inplace=True)
+    
+    # --- LINHA DE CÓDIGO ADICIONADA PARA A CORREÇÃO ---
+    # Preenche os bairros não encontrados com um valor padrão para evitar que sejam descartados.
+    # df_com_bairro['NOME_BAIRRO'].fillna('Bairro não identificado', inplace=True)
+    # --- FIM DA CORREÇÃO ---
 
     gdf_estado = gpd.read_file(URL_GEOJSON_ESTADO_RIO)
     gdf_municipio = gdf_estado[gdf_estado['name'] == 'Rio de Janeiro']
@@ -77,9 +86,54 @@ df_original, municipio_rj_geo, bairros_rj_geo = carregar_dados()
 votos_fernando = int(df_original[df_original[COLUNA_CANDIDATO] == NOME_FERNANDO]['QT_VOTOS_TOTAL'].sum())
 votos_india = int(df_original[df_original[COLUNA_CANDIDATO] == NOME_INDIA]['QT_VOTOS_TOTAL'].sum())
 
+# **CORREÇÃO APLICADA AQUI**
+# Formata o número com ponto como separador de milhar antes de exibi-lo.
+formatted_votos_fernando = f"{votos_fernando:,}".replace(",", ".")
+formatted_votos_india = f"{votos_india:,}".replace(",", ".")
+
+# Estilo CSS para os cartões de métrica
+st.markdown("""
+<style>
+/* Estilo para garantir que o contêiner da métrica não adicione margens extras indesejadas */
+div[data-testid="stMetric"] > div {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+.metric-container {
+    background-color: #0E1117;
+    border: 1px solid rgba(250, 250, 250, 0.2);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+.metric-label {
+    font-size: 0.9em;
+    color: #FAFAFA;
+    opacity: 0.7;
+}
+.metric-value {
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.5;
+}
+</style>
+""", unsafe_allow_html=True)
+
 col1, col2, _ = st.columns(3)
-col1.metric(label=f"Total de Votos - {NOME_FERNANDO}", value=f"{votos_fernando:,}".replace(",", "."))
-col2.metric(label=f"Total de Votos - {NOME_INDIA}", value=f"{votos_india:,}".replace(",", "."))
+with col1:
+    st.markdown(f"""
+    <div class="metric-container">
+        <div class="metric-label">Total de Votos - {NOME_FERNANDO}</div>
+        <div class="metric-value" style="color: {COR_FERNANDO};">{formatted_votos_fernando}</div>
+    </div>
+    """, unsafe_allow_html=True)
+with col2:
+    st.markdown(f"""
+    <div class="metric-container">
+        <div class="metric-label">Total de Votos - {NOME_INDIA}</div>
+        <div class="metric-value" style="color: {COR_INDIA};">{formatted_votos_india}</div>
+    </div>
+    """, unsafe_allow_html=True)
 st.divider()
 
 # --- FILTROS NA PÁGINA PRINCIPAL ---
@@ -87,16 +141,18 @@ st.subheader("Filtros de Visualização")
 filt_col1, filt_col2, filt_col3 = st.columns([1, 1, 2])
 
 with filt_col1:
-    modo_analise = st.radio("Modo de Análise:", ("Comparativo (Locais em Comum)", "Visão Geral (Ambos)", "Apenas Fernando Paes", "Apenas Índia Armelau"), index=0)
+    # **ALTERAÇÃO AQUI: Removido o modo "Comparativo"**
+    modo_analise = st.radio(
+        "Modo de Análise:",
+        ("Visão Geral", "Apenas Fernando Paes", "Apenas Índia Armelau"),
+        index=0
+    )
 
 df_pre_filtro = df_original.copy()
 if modo_analise == "Apenas Fernando Paes":
     df_pre_filtro = df_original[df_original[COLUNA_CANDIDATO] == NOME_FERNANDO]
 elif modo_analise == "Apenas Índia Armelau":
     df_pre_filtro = df_original[df_original[COLUNA_CANDIDATO] == NOME_INDIA]
-elif modo_analise == "Comparativo (Locais em Comum)":
-    locais_comuns = df_original.groupby('NM_LOCAL_VOTACAO').filter(lambda x: len(x[COLUNA_CANDIDATO].unique()) == 2)['NM_LOCAL_VOTACAO'].unique()
-    df_pre_filtro = df_original[df_original['NM_LOCAL_VOTACAO'].isin(locais_comuns)]
 
 
 with filt_col2:
@@ -122,7 +178,7 @@ if not df_filtrado.empty and 'NOME_BAIRRO' in df_filtrado.columns:
     if modo_analise in ["Apenas Fernando Paes", "Apenas Índia Armelau"]:
         df_mapa = df_filtrado[['NM_LOCAL_VOTACAO', 'lat', 'lon', 'QT_VOTOS_TOTAL']].copy()
         df_mapa.rename(columns={'QT_VOTOS_TOTAL': 'Votos_Candidato_Unico'}, inplace=True)
-    else:
+    else: # modo_analise == "Visão Geral"
         df_mapa = df_filtrado.pivot_table(index=['NM_LOCAL_VOTACAO', 'lat', 'lon'], columns=COLUNA_CANDIDATO, values='QT_VOTOS_TOTAL', aggfunc='sum').reset_index().fillna(0)
         if NOME_FERNANDO not in df_mapa: df_mapa[NOME_FERNANDO] = 0
         if NOME_INDIA not in df_mapa: df_mapa[NOME_INDIA] = 0
@@ -151,7 +207,7 @@ with legend_col:
     st.divider()
 
     if tipo_visualizacao == "Por Bairro":
-        if modo_analise in ["Comparativo (Locais em Comum)", "Visão Geral (Ambos)"]:
+        if modo_analise == "Visão Geral":
             st.markdown("**Disputa no Bairro:**")
             st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: {COR_FERNANDO}; border-radius: 5px; margin-right: 10px;"></div><span>Vitória de F. Paes</span></div>', unsafe_allow_html=True)
             st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 15px;"><div style="width: 20px; height: 20px; background-color: {COR_INDIA}; border-radius: 5px; margin-right: 10px;"></div><span>Vitória de Í. Armelau</span></div>', unsafe_allow_html=True)
@@ -187,7 +243,7 @@ with map_col:
 
     if not df_filtrado.empty and 'NOME_BAIRRO' in df_filtrado.columns:
         if tipo_visualizacao == "Por Bairro":
-            if modo_analise in ["Comparativo (Locais em Comum)", "Visão Geral (Ambos)"]:
+            if modo_analise == "Visão Geral":
                 df_bairros_agg = df_filtrado.pivot_table(index='NOME_BAIRRO', columns=COLUNA_CANDIDATO, values='QT_VOTOS_TOTAL', aggfunc='sum').fillna(0)
                 if NOME_FERNANDO not in df_bairros_agg: df_bairros_agg[NOME_FERNANDO] = 0
                 if NOME_INDIA not in df_bairros_agg: df_bairros_agg[NOME_INDIA] = 0
@@ -201,23 +257,23 @@ with map_col:
 
                 gdf_bairros_plot = bairros_rj_geo.merge(df_bairros_agg, left_on='nome', right_index=True, how='left').fillna(0)
                 
-                # --- CORREÇÃO: LÓGICA DE NORMALIZAÇÃO DA COR ---
                 bairros_com_votos = gdf_bairros_plot[gdf_bairros_plot['Total_Votos'] > 0]
-                min_sinergia = bairros_com_votos['Sinergia'].min()
-                max_sinergia = bairros_com_votos['Sinergia'].max()
-                range_sinergia = max_sinergia - min_sinergia if max_sinergia > min_sinergia else 1.0
+                if not bairros_com_votos.empty:
+                    min_sinergia = bairros_com_votos['Sinergia'].min()
+                    max_sinergia = bairros_com_votos['Sinergia'].max()
+                    range_sinergia = max_sinergia - min_sinergia if max_sinergia > min_sinergia else 1.0
+                else:
+                    min_sinergia, range_sinergia = 0, 1
 
                 def get_bairro_color_comparativo(row):
                     base_color = RGB_FERNANDO if row['Diferenca'] > 0 else RGB_INDIA
-                    if row['Total_Votos'] > 0:
+                    if row['Total_Votos'] > 0 and range_sinergia > 0:
                         normalized_sinergia = (row['Sinergia'] - min_sinergia) / range_sinergia
-                        # Usa uma potência para dar mais peso visual às diferenças
                         adjusted_sinergia = normalized_sinergia ** 0.75
                         alpha = int(50 + adjusted_sinergia * 205)
                     else:
                         alpha = 20
                     return base_color + [alpha]
-                # --- FIM DA CORREÇÃO ---
 
                 gdf_bairros_plot['cor'] = gdf_bairros_plot.apply(get_bairro_color_comparativo, axis=1)
                 gdf_bairros_plot['tooltip'] = gdf_bairros_plot.apply(
@@ -226,7 +282,7 @@ with map_col:
                             f"Í. Armelau: {int(r[NOME_INDIA])}<br>"
                             f"<b>Diferença: {int(r['Diferenca'])}</b><br>"
                             f"<i>Sinergia: {r['Sinergia']:.1%}</i>", axis=1)
-            else:
+            else: # Apenas um candidato
                 candidato_selecionado = NOME_FERNANDO if modo_analise == "Apenas Fernando Paes" else NOME_INDIA
                 cor_base_rgb = RGB_FERNANDO if modo_analise == "Apenas Fernando Paes" else RGB_INDIA
                 
@@ -256,7 +312,7 @@ with map_col:
                 df_mapa['cor'] = df_mapa['Votos_Candidato_Unico'].apply(lambda x: cor_base_rgb + [int(50 + (x / max_votos_unico) * 205)])
                 df_mapa['raio'] = df_mapa['Votos_Candidato_Unico'].apply(lambda x: 100 + (x / max_votos_unico * 400))
                 df_mapa['tooltip'] = df_mapa.apply(lambda r: f"<b>{r['NM_LOCAL_VOTACAO']}</b><br>Votos: {r['Votos_Candidato_Unico']}", axis=1)
-            else:
+            else: # modo_analise == "Visão Geral"
                 max_abs_diff = df_mapa['Diferença'].abs().max() or 1
                 max_total_votos = df_mapa['Total_Votos'].max() or 1
                 df_mapa['Diff_Relativa'] = (df_mapa['Diferença'].abs() / (df_mapa['Total_Votos'] + 1e-9)).fillna(0)
@@ -279,7 +335,7 @@ with map_col:
         else: # Renderiza o Mapa de Calor
             if modo_analise in ["Apenas Fernando Paes", "Apenas Índia Armelau"]:
                 heatmap_weight_col = 'Votos_Candidato_Unico'
-            else:
+            else: # modo_analise == "Visão Geral"
                 heatmap_weight_col = 'Sinergia_Peso'
             heatmap_layer = pdk.Layer(
                 "HeatmapLayer", data=df_mapa, opacity=0.9, get_position='[lon, lat]',
@@ -292,34 +348,92 @@ with map_col:
 
 # --- SEÇÃO DE ANÁLISE DETALHADA ---
 st.divider()
-st.header("Rankings e Análises Detalhadas")
+st.header("Análise Detalhada por Agrupamento")
 
-if modo_analise in ["Comparativo (Locais em Comum)", "Visão Geral (Ambos)"]:
-    if not df_mapa.empty:
-        df_analise = df_mapa.set_index('NM_LOCAL_VOTACAO')
-        df_analise['Diferença Absoluta'] = df_analise['Diferença'].abs()
-        df_analise_com_votos = df_analise[df_analise['Total_Votos'] > 0].copy()
+# **ALTERAÇÃO AQUI: A seção inteira foi reescrita para ser interativa e mais completa**
+if modo_analise == "Visão Geral":
+    if not df_filtrado.empty:
+        analysis_col1, analysis_col2 = st.columns([1, 3])
 
-        tab1, tab2, tab3, tab4 = st.tabs(["🏆 Maiores Vitórias (Paes)", "🏆 Maiores Vitórias (Índia)", "🤝 Votações Mais Próximas", "🗳️ Maiores Votações (Soma)"])
+        with analysis_col1:
+            mapa_agrupamento = {
+                "Bairro": "NOME_BAIRRO",
+                "Zona Eleitoral": "NR_ZONA",
+                "Local de Votação": "NM_LOCAL_VOTACAO"
+            }
+            nivel_analise = st.radio(
+                "Analisar por:",
+                options=list(mapa_agrupamento.keys()),
+                horizontal=False,
+                key="nivel_analise_radio"
+            )
+            coluna_agrupamento = mapa_agrupamento[nivel_analise]
 
-        def display_ranking(tab, title, dataframe, sort_by, ascending, cols_to_show, key_prefix):
-            with tab:
-                st.subheader(title)
-                top_n = st.number_input("Mostrar Top N:", min_value=5, max_value=100, value=10, step=5, key=f"num_{key_prefix}")
-                st.dataframe(dataframe.sort_values(by=sort_by, ascending=ascending).head(top_n)[cols_to_show], use_container_width=True)
+            # Dicionário de opções de ordenação
+            opcoes_ordenacao = {
+                "Padrão (Alfabética)": ("index", True),
+                "Mais Votos (F. Paes)": ("Votos F. Paes", False),
+                "Mais Votos (Í. Armelau)": ("Votos Í. Armelau", False),
+                "Maior Volume Total de Votos": ("Total de Votos", False),
+                "Maior Vantagem (F. Paes)": ("Diferença (Paes - Armelau)", False),
+                "Maior Vantagem (Í. Armelau)": ("Diferença (Paes - Armelau)", True),
+            }
+            ordenacao_selecionada = st.selectbox(
+                "Ordenar por:",
+                options=list(opcoes_ordenacao.keys())
+            )
 
-        display_ranking(tab1, "Locais com Maior Vantagem para Fernando Paes", df_analise, 'Diferença', False, [NOME_FERNANDO, NOME_INDIA, 'Diferença'], "paes_win")
-        display_ranking(tab2, "Locais com Maior Vantagem para Índia Armelau", df_analise, 'Diferença', True, [NOME_FERNANDO, NOME_INDIA, 'Diferença Absoluta'], "india_win")
-        display_ranking(tab3, "Locais com Votações Mais Parecidas", df_analise_com_votos, 'Diferença Absoluta', True, [NOME_FERNANDO, NOME_INDIA, 'Diferença Absoluta'], "proximos")
-        display_ranking(tab4, "Locais com Maior Soma de Votos", df_analise, 'Total_Votos', False, ['Total_Votos', NOME_FERNANDO, NOME_INDIA], "total")
+        with analysis_col2:
+            search_term = st.text_input(
+                f"Pesquisar por {nivel_analise}:",
+                placeholder="Digite para filtrar a tabela...",
+                key=f"search_{nivel_analise}"
+            )
+            
+            df_analise = df_filtrado.pivot_table(
+                index=coluna_agrupamento,
+                columns=COLUNA_CANDIDATO,
+                values='QT_VOTOS_TOTAL',
+                aggfunc='sum'
+            ).fillna(0).astype(int)
 
-        st.divider()
-        st.header("Desempenho nos Maiores Colégios Eleitorais")
-        st.markdown("Comparativo do número de votos nos 40 locais com maior volume total de votação (respeitando os filtros aplicados).")
+            if NOME_FERNANDO not in df_analise.columns: df_analise[NOME_FERNANDO] = 0
+            if NOME_INDIA not in df_analise.columns: df_analise[NOME_INDIA] = 0
+                
+            df_analise.rename(columns={
+                NOME_FERNANDO: "Votos F. Paes",
+                NOME_INDIA: "Votos Í. Armelau"
+            }, inplace=True)
 
-        df_grafico_linha = df_analise.sort_values(by='Total_Votos', ascending=False).head(40)
-        st.line_chart(df_grafico_linha[[NOME_INDIA, NOME_FERNANDO]], color=[COR_INDIA, COR_FERNANDO])
+            # Adiciona colunas para total e diferença
+            df_analise["Total de Votos"] = df_analise["Votos F. Paes"] + df_analise["Votos Í. Armelau"]
+            df_analise["Diferença (Paes - Armelau)"] = df_analise["Votos F. Paes"] - df_analise["Votos Í. Armelau"]
+
+            # Aplica o filtro de pesquisa
+            if search_term:
+                df_analise = df_analise[
+                    df_analise.index.astype(str).str.contains(search_term, case=False, na=False)
+                ]
+
+            # Aplica a ordenação selecionada
+            coluna_sort, ascendente = opcoes_ordenacao[ordenacao_selecionada]
+            if coluna_sort == "index":
+                df_display = df_analise.sort_index(ascending=ascendente)
+            else:
+                df_display = df_analise.sort_values(by=coluna_sort, ascending=ascendente)
+
+            # Estilização do DataFrame com cores
+            def color_paes(val):
+                return f'color: {COR_FERNANDO}'
+            def color_india(val):
+                return f'color: {COR_INDIA}'
+
+            styled_df = df_display.style.applymap(color_paes, subset=['Votos F. Paes']) \
+                                        .applymap(color_india, subset=['Votos Í. Armelau'])
+            
+            st.dataframe(styled_df, use_container_width=True)
+
     else:
-        st.info("Nenhum dado para exibir nos rankings e gráficos para os filtros atuais.")
+        st.info("Nenhum dado para exibir na análise detalhada com os filtros atuais.")
 else:
-    st.info("Selecione um modo de análise comparativo para ver os rankings e gráficos detalhados.")
+    st.info("Selecione o modo 'Visão Geral' para ver a análise detalhada por agrupamento.")
