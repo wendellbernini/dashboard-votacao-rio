@@ -409,6 +409,10 @@ if modo_analise == "Visão Geral":
             df_analise["Total de Votos"] = df_analise["Votos F. Paes"] + df_analise["Votos Í. Armelau"]
             df_analise["Diferença (Paes - Armelau)"] = df_analise["Votos F. Paes"] - df_analise["Votos Í. Armelau"]
 
+                        # Adiciona a coluna com a porcentagem da diferença
+            epsilon = 1e-9 # Evita divisão por zero
+            df_analise["Diferença (%)"] = (df_analise["Diferença (Paes - Armelau)"].abs() / (df_analise["Total de Votos"] + epsilon)) * 100
+
             # Aplica o filtro de pesquisa
             if search_term:
                 df_analise = df_analise[
@@ -429,7 +433,8 @@ if modo_analise == "Visão Geral":
                 return f'color: {COR_INDIA}'
 
             styled_df = df_display.style.applymap(color_paes, subset=['Votos F. Paes']) \
-                                        .applymap(color_india, subset=['Votos Í. Armelau'])
+                                        .applymap(color_india, subset=['Votos Í. Armelau']) \
+                                        .format({"Diferença (%)": "{:.1f}%"})
             
             st.dataframe(styled_df, use_container_width=True)
 
