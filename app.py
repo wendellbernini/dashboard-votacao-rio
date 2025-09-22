@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import pydeck as pdk
 import geopandas as gpd
+import numpy as np
+import base64
+from io import BytesIO
+import json
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 
@@ -12,6 +16,31 @@ st.set_page_config(
 )
 
 st.title("Análise Interativa de Votação - Município do Rio de Janeiro")
+
+# --- FUNÇÕES AUXILIARES ---
+def create_download_link(data, filename, file_type):
+    """Cria link de download para arquivos"""
+    if file_type == "json":
+        b64 = base64.b64encode(data.encode()).decode()
+        href = f'<a href="data:application/json;base64,{b64}" download="{filename}">Baixar {filename}</a>'
+    elif file_type == "csv":
+        b64 = base64.b64encode(data.encode()).decode()
+        href = f'<a href="data:text/csv;base64,{b64}" download="{filename}">Baixar {filename}</a>'
+    return href
+
+def export_map_data(df, tipo_visualizacao, candidato_selecionado):
+    """Exporta dados do mapa para diferentes formatos"""
+    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Preparar dados para exportação
+    export_data = df.copy()
+    
+    # Adicionar informações de contexto
+    export_data['Tipo_Visualizacao'] = tipo_visualizacao
+    export_data['Candidato'] = candidato_selecionado if candidato_selecionado != "Visão Geral" else "Ambos"
+    export_data['Data_Exportacao'] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    return export_data, timestamp
 
 # --- CONSTANTES ---
 COLUNA_CANDIDATO = 'NM_VOTAVEL'
@@ -100,16 +129,16 @@ div[data-testid="stMetric"] > div {
     padding: 0 !important;
 }
 .metric-container {
-    background-color: #0E1117;
-    border: 1px solid rgba(250, 250, 250, 0.2);
+    background-color: transparent;
+    border: none;
     border-radius: 0.5rem;
     padding: 1rem;
     margin-bottom: 1rem;
 }
 .metric-label {
     font-size: 0.9em;
-    color: #FAFAFA;
-    opacity: 0.7;
+    color: #666666;
+    opacity: 1;
 }
 .metric-value {
     font-size: 1.75rem;
@@ -200,26 +229,13 @@ with legend_col:
     st.header("Legenda do Mapa")
     tipo_visualizacao = st.radio(
         "Tipo de Visualização:",
-        ("Pontos", "Mapa de Calor", "Por Bairro"),
-        index=0,
-        help="'Pontos': vencedor por local. 'Mapa de Calor': concentração de votos. 'Por Bairro': vencedor por bairro."
+        ("Pontos", "Mancha de Votos"),
+        index=1,
+        help="'Pontos': vencedor por local. 'Mancha de Votos': sinergia eleitoral entre candidatos."
     )
     st.divider()
 
-    if tipo_visualizacao == "Por Bairro":
-        if modo_analise == "Visão Geral":
-            st.markdown("**Disputa no Bairro:**")
-            st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: {COR_FERNANDO}; border-radius: 5px; margin-right: 10px;"></div><span>Vitória de F. Paes</span></div>', unsafe_allow_html=True)
-            st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 15px;"><div style="width: 20px; height: 20px; background-color: {COR_INDIA}; border-radius: 5px; margin-right: 10px;"></div><span>Vitória de Í. Armelau</span></div>', unsafe_allow_html=True)
-            st.markdown("**Intensidade da Cor:**<p style='font-size: 0.9em;'>Quanto mais <b>forte</b> a cor, <b>mais equilibrada</b> (menor diferença percentual) foi a votação no bairro.</p>", unsafe_allow_html=True)
-        else:
-            candidato_selecionado = "Fernando Paes" if modo_analise == "Apenas Fernando Paes" else "Índia Armelau"
-            cor_base_html = COR_FERNANDO if candidato_selecionado == "Fernando Paes" else COR_INDIA
-            st.markdown(f"**Concentração de Votos:**")
-            st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: {cor_base_html}; border-radius: 5px; margin-right: 10px;"></div><span>Votos de {candidato_selecionado}</span></div>', unsafe_allow_html=True)
-            st.markdown("**Intensidade da Cor:**<p style='font-size: 0.9em;'>Quanto mais <b>forte</b> a cor, <b>maior</b> o número absoluto de votos para o candidato no bairro.</p>", unsafe_allow_html=True)
-
-    elif tipo_visualizacao == "Pontos" and not df_mapa.empty:
+    if tipo_visualizacao == "Pontos" and not df_mapa.empty:
         if modo_analise in ["Apenas Fernando Paes", "Apenas Índia Armelau"]:
             candidato_selecionado = "Fernando Paes" if modo_analise == "Apenas Fernando Paes" else "Índia Armelau"
             cor_base_html = COR_FERNANDO if candidato_selecionado == "Fernando Paes" else COR_INDIA
@@ -229,12 +245,29 @@ with legend_col:
             st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: {COR_FERNANDO}; border-radius: 50%; margin-right: 10px;"></div><span>Fernando Paes</span></div>', unsafe_allow_html=True)
             st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 15px;"><div style="width: 20px; height: 20px; background-color: {COR_INDIA}; border-radius: 50%; margin-right: 10px;"></div><span>Índia Armelau</span></div>', unsafe_allow_html=True)
 
-    elif tipo_visualizacao == "Mapa de Calor":
+    elif tipo_visualizacao == "Mancha de Votos":
         if modo_analise in ["Apenas Fernando Paes", "Apenas Índia Armelau"]:
             candidato_selecionado = "Fernando Paes" if modo_analise == "Apenas Fernando Paes" else "Índia Armelau"
-            st.markdown(f"O mapa de calor visualiza a **concentração de votos** de **{candidato_selecionado}**.")
+            cor_base_html = COR_FERNANDO if candidato_selecionado == "Fernando Paes" else COR_INDIA
+            st.markdown(f"**Mancha de Votos - {candidato_selecionado}**")
+            st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: {cor_base_html}; border-radius: 5px; margin-right: 10px;"></div><span>Força Eleitoral</span></div>', unsafe_allow_html=True)
+            st.markdown("**Escala de Intensidade:**<p style='font-size: 0.9em;'>Cada bairro é colorido conforme a <b>força eleitoral</b> do candidato. Quanto mais <b>intensa</b> a cor, <b>maior</b> o número de votos na região.</p>", unsafe_allow_html=True)
         else:
-            st.markdown("O mapa de calor visualiza a **sinergia** de votos.")
+            st.markdown("**Mancha de Sinergia - Parceria Eleitoral**")
+            
+            # Opção para escolher entre Força Conjunta e Apenas Sinergia
+            tipo_mancha = st.radio(
+                "Visualizar por:",
+                ("Força Conjunta", "Apenas Sinergia"),
+                help="'Força Conjunta': combina sinergia + volume total. 'Apenas Sinergia': foca na transferência de votos."
+            )
+            
+            if tipo_mancha == "Força Conjunta":
+                st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: #1E90FF; border-radius: 5px; margin-right: 10px;"></div><span>Força da Parceria</span></div>', unsafe_allow_html=True)
+                st.markdown("**Escala de Intensidade:**<p style='font-size: 0.9em;'>Escala de <b>azul</b> com intensidades diferentes. Quanto mais <b>intenso</b> o azul, maior a <b>força conjunta</b> (sinergia + volume de votos) entre Fernando Paes e Índia Armelau.</p>", unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div style="display: flex; align-items: center; margin-bottom: 5px;"><div style="width: 20px; height: 20px; background-color: #1E90FF; border-radius: 5px; margin-right: 10px;"></div><span>Transferência de Votos</span></div>', unsafe_allow_html=True)
+                st.markdown("**Escala de Sinergia:**<p style='font-size: 0.9em;'>Escala de <b>azul</b> focada na <b>transferência de votos</b> entre os candidatos. Quanto mais <b>intenso</b> o azul, maior a <b>sinergia eleitoral</b> na região, independente do volume total.</p>", unsafe_allow_html=True)
 
 # --- RENDERIZAÇÃO DO MAPA ---
 with map_col:
@@ -242,70 +275,7 @@ with map_col:
     polygon_layer = pdk.Layer("GeoJsonLayer", data=municipio_rj_geo, get_fill_color="[220, 220, 220, 40]", get_line_color="[0, 0, 0, 100]", get_line_width=30)
 
     if not df_filtrado.empty and 'NOME_BAIRRO' in df_filtrado.columns:
-        if tipo_visualizacao == "Por Bairro":
-            if modo_analise == "Visão Geral":
-                df_bairros_agg = df_filtrado.pivot_table(index='NOME_BAIRRO', columns=COLUNA_CANDIDATO, values='QT_VOTOS_TOTAL', aggfunc='sum').fillna(0)
-                if NOME_FERNANDO not in df_bairros_agg: df_bairros_agg[NOME_FERNANDO] = 0
-                if NOME_INDIA not in df_bairros_agg: df_bairros_agg[NOME_INDIA] = 0
-                df_bairros_agg[NOME_FERNANDO] = df_bairros_agg[NOME_FERNANDO].astype(int)
-                df_bairros_agg[NOME_INDIA] = df_bairros_agg[NOME_INDIA].astype(int)
-                df_bairros_agg['Diferenca'] = df_bairros_agg[NOME_FERNANDO] - df_bairros_agg[NOME_INDIA]
-                df_bairros_agg['Total_Votos'] = df_bairros_agg[NOME_FERNANDO] + df_bairros_agg[NOME_INDIA]
-                df_bairros_agg['Diferenca_Absoluta'] = df_bairros_agg['Diferenca'].abs()
-                epsilon = 1e-9
-                df_bairros_agg['Sinergia'] = 1 - (df_bairros_agg['Diferenca_Absoluta'] / (df_bairros_agg['Total_Votos'] + epsilon))
-
-                gdf_bairros_plot = bairros_rj_geo.merge(df_bairros_agg, left_on='nome', right_index=True, how='left').fillna(0)
-                
-                bairros_com_votos = gdf_bairros_plot[gdf_bairros_plot['Total_Votos'] > 0]
-                if not bairros_com_votos.empty:
-                    min_sinergia = bairros_com_votos['Sinergia'].min()
-                    max_sinergia = bairros_com_votos['Sinergia'].max()
-                    range_sinergia = max_sinergia - min_sinergia if max_sinergia > min_sinergia else 1.0
-                else:
-                    min_sinergia, range_sinergia = 0, 1
-
-                def get_bairro_color_comparativo(row):
-                    base_color = RGB_FERNANDO if row['Diferenca'] > 0 else RGB_INDIA
-                    if row['Total_Votos'] > 0 and range_sinergia > 0:
-                        normalized_sinergia = (row['Sinergia'] - min_sinergia) / range_sinergia
-                        adjusted_sinergia = normalized_sinergia ** 0.75
-                        alpha = int(50 + adjusted_sinergia * 205)
-                    else:
-                        alpha = 20
-                    return base_color + [alpha]
-
-                gdf_bairros_plot['cor'] = gdf_bairros_plot.apply(get_bairro_color_comparativo, axis=1)
-                gdf_bairros_plot['tooltip'] = gdf_bairros_plot.apply(
-                    lambda r: f"<b>Bairro: {r['nome']}</b><br>"
-                            f"F. Paes: {int(r[NOME_FERNANDO])}<br>"
-                            f"Í. Armelau: {int(r[NOME_INDIA])}<br>"
-                            f"<b>Diferença: {int(r['Diferenca'])}</b><br>"
-                            f"<i>Sinergia: {r['Sinergia']:.1%}</i>", axis=1)
-            else: # Apenas um candidato
-                candidato_selecionado = NOME_FERNANDO if modo_analise == "Apenas Fernando Paes" else NOME_INDIA
-                cor_base_rgb = RGB_FERNANDO if modo_analise == "Apenas Fernando Paes" else RGB_INDIA
-                
-                df_bairros_agg = df_filtrado.groupby('NOME_BAIRRO')['QT_VOTOS_TOTAL'].sum().reset_index()
-                gdf_bairros_plot = bairros_rj_geo.merge(df_bairros_agg, left_on='nome', right_on='NOME_BAIRRO', how='left').fillna(0)
-                max_votos_bairro = gdf_bairros_plot['QT_VOTOS_TOTAL'].max() or 1
-                
-                def get_bairro_color_unico(votos):
-                    alpha = 50 + int((votos / max_votos_bairro) * 205)
-                    return cor_base_rgb + [alpha]
-
-                gdf_bairros_plot['cor'] = gdf_bairros_plot['QT_VOTOS_TOTAL'].apply(get_bairro_color_unico)
-                gdf_bairros_plot['tooltip'] = gdf_bairros_plot.apply(
-                    lambda r: f"<b>Bairro: {r['nome']}</b><br>"
-                            f"Votos: {int(r['QT_VOTOS_TOTAL'])}", axis=1)
-
-            bairro_layer = pdk.Layer(
-                "GeoJsonLayer", data=gdf_bairros_plot, opacity=0.7, pickable=True,
-                get_fill_color='cor', get_line_color=[0, 0, 0, 100], get_line_width=15,
-            )
-            st.pydeck_chart(pdk.Deck(layers=[polygon_layer, bairro_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT, tooltip={"html": "{tooltip}"}))
-        
-        elif tipo_visualizacao == "Pontos":
+        if tipo_visualizacao == "Pontos":
             if modo_analise in ["Apenas Fernando Paes", "Apenas Índia Armelau"]:
                 max_votos_unico = df_mapa['Votos_Candidato_Unico'].max() or 1
                 cor_base_rgb = RGB_FERNANDO if modo_analise == "Apenas Fernando Paes" else RGB_INDIA
@@ -332,16 +302,172 @@ with map_col:
             scatterplot_layer = pdk.Layer("ScatterplotLayer", data=df_mapa, get_position='[lon, lat]', get_color='cor', get_radius='raio', pickable=True)
             st.pydeck_chart(pdk.Deck(layers=[polygon_layer, scatterplot_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT, tooltip={"html": "{tooltip}"}))
 
-        else: # Renderiza o Mapa de Calor
+            # Botões de exportação
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("Exportar Dados (CSV)", key="export_csv_pontos"):
+                    export_data, timestamp = export_map_data(df_mapa, "Pontos", modo_analise)
+                    csv_data = export_data.to_csv(index=False, encoding='utf-8-sig')
+                    st.markdown(create_download_link(csv_data, f"dados_pontos_{timestamp}.csv", "csv"), unsafe_allow_html=True)
+            
+            with col2:
+                if st.button("Exportar Dados (JSON)", key="export_json_pontos"):
+                    export_data, timestamp = export_map_data(df_mapa, "Pontos", modo_analise)
+                    json_data = export_data.to_json(orient='records', force_ascii=False, indent=2)
+                    st.markdown(create_download_link(json_data, f"dados_pontos_{timestamp}.json", "json"), unsafe_allow_html=True)
+            
+            with col3:
+                if st.button("Salvar como PDF", key="export_pdf_pontos"):
+                    st.info("Use Ctrl+P no navegador para salvar o mapa como PDF")
+
+        elif tipo_visualizacao == "Mancha de Votos":
             if modo_analise in ["Apenas Fernando Paes", "Apenas Índia Armelau"]:
-                heatmap_weight_col = 'Votos_Candidato_Unico'
-            else: # modo_analise == "Visão Geral"
-                heatmap_weight_col = 'Sinergia_Peso'
-            heatmap_layer = pdk.Layer(
-                "HeatmapLayer", data=df_mapa, opacity=0.9, get_position='[lon, lat]',
-                get_weight=heatmap_weight_col, radius_pixels=25, intensity=2, threshold=0.03
-            )
-            st.pydeck_chart(pdk.Deck(layers=[polygon_layer, heatmap_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT))
+                # Para candidato individual, mostra força eleitoral
+                candidato_selecionado = NOME_FERNANDO if modo_analise == "Apenas Fernando Paes" else NOME_INDIA
+                cor_base_rgb = RGB_FERNANDO if modo_analise == "Apenas Fernando Paes" else RGB_INDIA
+                
+                # Agrupa votos por bairro
+                df_bairros_mancha = df_filtrado.groupby('NOME_BAIRRO')['QT_VOTOS_TOTAL'].sum().reset_index()
+                gdf_bairros_mancha = bairros_rj_geo.merge(df_bairros_mancha, left_on='nome', right_on='NOME_BAIRRO', how='left').fillna(0)
+                
+                # Calcula intensidade da mancha (0 a 1)
+                max_votos = gdf_bairros_mancha['QT_VOTOS_TOTAL'].max() or 1
+                gdf_bairros_mancha['intensidade'] = gdf_bairros_mancha['QT_VOTOS_TOTAL'] / max_votos
+                
+                # Cria cor baseada na intensidade
+                def get_mancha_color_unico(intensidade):
+                    alpha = int(50 + intensidade * 205)  # Transparência baseada na intensidade
+                    return cor_base_rgb + [alpha]
+                
+                gdf_bairros_mancha['cor'] = gdf_bairros_mancha['intensidade'].apply(get_mancha_color_unico)
+                gdf_bairros_mancha['tooltip'] = gdf_bairros_mancha.apply(
+                    lambda r: f"<b>Bairro: {r['nome']}</b><br>"
+                            f"Votos: {int(r['QT_VOTOS_TOTAL'])}<br>"
+                            f"Força Eleitoral: {r['intensidade']:.1%}", axis=1)
+                
+                mancha_layer = pdk.Layer(
+                    "GeoJsonLayer", data=gdf_bairros_mancha, opacity=0.8, pickable=True,
+                    get_fill_color='cor', get_line_color=[0, 0, 0, 100], get_line_width=15,
+                )
+                st.pydeck_chart(pdk.Deck(layers=[polygon_layer, mancha_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT, tooltip={"html": "{tooltip}"}))
+                
+                # Botões de exportação para candidato individual
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("Exportar Dados (CSV)", key="export_csv_mancha_individual"):
+                        export_data, timestamp = export_map_data(gdf_bairros_mancha, "Mancha de Votos", modo_analise)
+                        csv_data = export_data.to_csv(index=False, encoding='utf-8-sig')
+                        st.markdown(create_download_link(csv_data, f"dados_mancha_{timestamp}.csv", "csv"), unsafe_allow_html=True)
+                
+                with col2:
+                    if st.button("Exportar Dados (JSON)", key="export_json_mancha_individual"):
+                        export_data, timestamp = export_map_data(gdf_bairros_mancha, "Mancha de Votos", modo_analise)
+                        json_data = export_data.to_json(orient='records', force_ascii=False, indent=2)
+                        st.markdown(create_download_link(json_data, f"dados_mancha_{timestamp}.json", "json"), unsafe_allow_html=True)
+                
+                with col3:
+                    if st.button("Salvar como PDF", key="export_pdf_mancha_individual"):
+                        st.info("Use Ctrl+P no navegador para salvar o mapa como PDF")
+                
+            else: # modo_analise == "Visão Geral" - MANCHA DE SINERGIA
+                # Agrupa votos por bairro para cada candidato
+                df_bairros_mancha = df_filtrado.pivot_table(index='NOME_BAIRRO', columns=COLUNA_CANDIDATO, values='QT_VOTOS_TOTAL', aggfunc='sum').fillna(0)
+                if NOME_FERNANDO not in df_bairros_mancha: df_bairros_mancha[NOME_FERNANDO] = 0
+                if NOME_INDIA not in df_bairros_mancha: df_bairros_mancha[NOME_INDIA] = 0
+                
+                # Calcula SINERGIA - força conjunta dos candidatos
+                df_bairros_mancha['Total_Votos'] = df_bairros_mancha[NOME_FERNANDO] + df_bairros_mancha[NOME_INDIA]
+                df_bairros_mancha['Diferenca_Absoluta'] = abs(df_bairros_mancha[NOME_FERNANDO] - df_bairros_mancha[NOME_INDIA])
+                
+                # SINERGIA: quanto mais equilibrados os votos, maior a sinergia
+                # Sinergia = 1 - (diferença absoluta / total de votos)
+                epsilon = 1e-9
+                df_bairros_mancha['Sinergia'] = 1 - (df_bairros_mancha['Diferenca_Absoluta'] / (df_bairros_mancha['Total_Votos'] + epsilon))
+                
+                # Calcula força conjunta (sinergia + volume)
+                max_total = df_bairros_mancha['Total_Votos'].max() or 1
+                df_bairros_mancha['Forca_Conjunta'] = df_bairros_mancha['Sinergia'] * (df_bairros_mancha['Total_Votos'] / max_total)
+                
+                # Define qual valor usar baseado na opção selecionada
+                if tipo_mancha == "Apenas Sinergia":
+                    df_bairros_mancha['Valor_Visualizacao'] = df_bairros_mancha['Sinergia']
+                else:  # Força Conjunta
+                    df_bairros_mancha['Valor_Visualizacao'] = df_bairros_mancha['Forca_Conjunta']
+                
+                gdf_bairros_mancha = bairros_rj_geo.merge(df_bairros_mancha, left_on='nome', right_index=True, how='left').fillna(0)
+                
+                # Calcula percentis dos dados reais para criar escala baseada na distribuição
+                valores_para_escala = df_bairros_mancha['Valor_Visualizacao'].values
+                valores_para_escala = valores_para_escala[valores_para_escala > 0]  # Remove zeros
+                
+                if len(valores_para_escala) > 0:
+                    # Calcula percentis para criar escala baseada na distribuição real
+                    p25 = np.percentile(valores_para_escala, 25)
+                    p50 = np.percentile(valores_para_escala, 50)
+                    p75 = np.percentile(valores_para_escala, 75)
+                    p90 = np.percentile(valores_para_escala, 90)
+                    p95 = np.percentile(valores_para_escala, 95)
+                    p99 = np.percentile(valores_para_escala, 99)
+                else:
+                    p25 = p50 = p75 = p90 = p95 = p99 = 0.01
+                
+                
+                # Cria cor com ESCALA EXPONENCIAL - SEPARAÇÃO MÁXIMA DOS VALORES ALTOS
+                def get_mancha_color_sinergia(row):
+                    valor_base = row['Valor_Visualizacao']
+                    
+                    # ESCALA EXPONENCIAL PARA SEPARAR MELHOR OS VALORES ALTOS
+                    if valor_base <= 0:
+                        return [200, 200, 200, 5]  # Cinza quase invisível
+                    elif valor_base <= p25:
+                        return [30, 144, 255, 10]  # Azul MUITO claro
+                    elif valor_base <= p50:
+                        return [30, 144, 255, 25]  # Azul claro
+                    elif valor_base <= p75:
+                        return [30, 144, 255, 50]  # Azul médio
+                    elif valor_base <= p90:
+                        return [30, 144, 255, 100]  # Azul forte
+                    elif valor_base <= p95:
+                        return [30, 144, 255, 160]  # Azul muito forte
+                    elif valor_base <= p99:
+                        return [30, 144, 255, 200]  # Azul intenso
+                    else:
+                        return [30, 144, 255, 255]  # Azul máximo
+                
+                gdf_bairros_mancha['cor'] = gdf_bairros_mancha.apply(get_mancha_color_sinergia, axis=1)
+                gdf_bairros_mancha['tooltip'] = gdf_bairros_mancha.apply(
+                    lambda r: f"<b>Bairro: {r['nome']}</b><br>"
+                            f"F. Paes: {int(r[NOME_FERNANDO])}<br>"
+                            f"Í. Armelau: {int(r[NOME_INDIA])}<br>"
+                            f"<b>Total: {int(r['Total_Votos'])}</b><br>"
+                            f"<b>Sinergia: {r['Sinergia']:.1%}</b><br>"
+                            f"Força Conjunta: {r['Forca_Conjunta']:.1%}<br>"
+                            f"<b>{tipo_mancha}: {r['Valor_Visualizacao']:.1%}</b>", axis=1)
+                
+                mancha_layer = pdk.Layer(
+                    "GeoJsonLayer", data=gdf_bairros_mancha, opacity=0.8, pickable=True,
+                    get_fill_color='cor', get_line_color=[0, 0, 0, 100], get_line_width=15,
+                )
+                st.pydeck_chart(pdk.Deck(layers=[polygon_layer, mancha_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT, tooltip={"html": "{tooltip}"}))
+                
+                # Botões de exportação para sinergia
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("Exportar Dados (CSV)", key="export_csv_sinergia"):
+                        export_data, timestamp = export_map_data(gdf_bairros_mancha, f"Mancha de Sinergia - {tipo_mancha}", "Visão Geral")
+                        csv_data = export_data.to_csv(index=False, encoding='utf-8-sig')
+                        st.markdown(create_download_link(csv_data, f"dados_sinergia_{timestamp}.csv", "csv"), unsafe_allow_html=True)
+                
+                with col2:
+                    if st.button("Exportar Dados (JSON)", key="export_json_sinergia"):
+                        export_data, timestamp = export_map_data(gdf_bairros_mancha, f"Mancha de Sinergia - {tipo_mancha}", "Visão Geral")
+                        json_data = export_data.to_json(orient='records', force_ascii=False, indent=2)
+                        st.markdown(create_download_link(json_data, f"dados_sinergia_{timestamp}.json", "json"), unsafe_allow_html=True)
+                
+                with col3:
+                    if st.button("Salvar como PDF", key="export_pdf_sinergia"):
+                        st.info("Use Ctrl+P no navegador para salvar o mapa como PDF")
+        
     else:
         st.pydeck_chart(pdk.Deck(layers=[polygon_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT))
         st.info("Nenhum dado para exibir no mapa com os filtros atuais.")
