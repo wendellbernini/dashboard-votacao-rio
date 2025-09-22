@@ -381,26 +381,21 @@ with map_col:
                     st.pydeck_chart(pdk.Deck(layers=[polygon_layer, mancha_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT, tooltip={"html": "{tooltip}"}))
                 
                     # Botões de exportação para candidato individual
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        if st.button("Exportar Dados (CSV)", key="export_csv_mancha_individual"):
-                            export_data, timestamp = export_map_data(gdf_bairros_mancha, "Mancha de Votos", modo_analise)
-                            csv_data = export_data.to_csv(index=False, encoding='utf-8-sig')
-                            st.markdown(create_download_link(csv_data, f"dados_mancha_{timestamp}.csv", "csv"), unsafe_allow_html=True)
+                    if st.button("Exportar Dados (CSV)", key="export_csv_mancha_individual"):
+                        export_data, timestamp = export_map_data(gdf_bairros_mancha, "Mancha de Votos", modo_analise)
+                        csv_data = export_data.to_csv(index=False, encoding='utf-8-sig')
+                        st.markdown(create_download_link(csv_data, f"dados_mancha_{timestamp}.csv", "csv"), unsafe_allow_html=True)
                     
-                    with col2:
-                        if st.button("Exportar Dados (JSON)", key="export_json_mancha_individual"):
-                            export_data, timestamp = export_map_data(gdf_bairros_mancha, "Mancha de Votos", modo_analise)
-                            json_data = export_data.to_json(orient='records', force_ascii=False, indent=2)
-                            st.markdown(create_download_link(json_data, f"dados_mancha_{timestamp}.json", "json"), unsafe_allow_html=True)
+                    if st.button("Exportar Dados (JSON)", key="export_json_mancha_individual"):
+                        export_data, timestamp = export_map_data(gdf_bairros_mancha, "Mancha de Votos", modo_analise)
+                        json_data = export_data.to_json(orient='records', force_ascii=False, indent=2)
+                        st.markdown(create_download_link(json_data, f"dados_mancha_{timestamp}.json", "json"), unsafe_allow_html=True)
                     
-                    with col3:
-                        if st.button("Salvar como PDF", key="export_pdf_mancha_individual"):
-                            st.info("Use Ctrl+P no navegador para salvar o mapa como PDF")
+                    if st.button("Salvar como PDF", key="export_pdf_mancha_individual"):
+                        st.info("Use Ctrl+P no navegador para salvar o mapa como PDF")
                     
-                    with col4:
-                        if st.button("Capturar Mapa", key="screenshot_mancha_individual"):
-                            st.info("Use a ferramenta de captura de tela do navegador (F12 > Screenshot) para capturar o mapa em alta qualidade")
+                    if st.button("Capturar Mapa", key="screenshot_mancha_individual"):
+                        st.info("Use a ferramenta de captura de tela do navegador (F12 > Screenshot) para capturar o mapa em alta qualidade")
                 
                 else: # modo_analise == "Visão Geral" - MANCHA DE SINERGIA
                     # Agrupa votos por bairro para cada candidato
@@ -484,26 +479,21 @@ with map_col:
                     st.pydeck_chart(pdk.Deck(layers=[polygon_layer, mancha_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT, tooltip={"html": "{tooltip}"}))
                 
                     # Botões de exportação para sinergia
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        if st.button("Exportar Dados (CSV)", key="export_csv_sinergia"):
-                            export_data, timestamp = export_map_data(gdf_bairros_mancha, f"Mancha de Sinergia - {tipo_mancha}", "Visão Geral")
-                            csv_data = export_data.to_csv(index=False, encoding='utf-8-sig')
-                            st.markdown(create_download_link(csv_data, f"dados_sinergia_{timestamp}.csv", "csv"), unsafe_allow_html=True)
+                    if st.button("Exportar Dados (CSV)", key="export_csv_sinergia"):
+                        export_data, timestamp = export_map_data(gdf_bairros_mancha, f"Mancha de Sinergia - {tipo_mancha}", "Visão Geral")
+                        csv_data = export_data.to_csv(index=False, encoding='utf-8-sig')
+                        st.markdown(create_download_link(csv_data, f"dados_sinergia_{timestamp}.csv", "csv"), unsafe_allow_html=True)
                     
-                    with col2:
-                        if st.button("Exportar Dados (JSON)", key="export_json_sinergia"):
-                            export_data, timestamp = export_map_data(gdf_bairros_mancha, f"Mancha de Sinergia - {tipo_mancha}", "Visão Geral")
-                            json_data = export_data.to_json(orient='records', force_ascii=False, indent=2)
-                            st.markdown(create_download_link(json_data, f"dados_sinergia_{timestamp}.json", "json"), unsafe_allow_html=True)
+                    if st.button("Exportar Dados (JSON)", key="export_json_sinergia"):
+                        export_data, timestamp = export_map_data(gdf_bairros_mancha, f"Mancha de Sinergia - {tipo_mancha}", "Visão Geral")
+                        json_data = export_data.to_json(orient='records', force_ascii=False, indent=2)
+                        st.markdown(create_download_link(json_data, f"dados_sinergia_{timestamp}.json", "json"), unsafe_allow_html=True)
                     
-                    with col3:
-                        if st.button("Salvar como PDF", key="export_pdf_sinergia"):
-                            st.info("Use Ctrl+P no navegador para salvar o mapa como PDF")
+                    if st.button("Salvar como PDF", key="export_pdf_sinergia"):
+                        st.info("Use Ctrl+P no navegador para salvar o mapa como PDF")
                     
-                    with col4:
-                        if st.button("Capturar Mapa", key="screenshot_sinergia"):
-                            st.info("Use a ferramenta de captura de tela do navegador (F12 > Screenshot) para capturar o mapa em alta qualidade")
+                    if st.button("Capturar Mapa", key="screenshot_sinergia"):
+                        st.info("Use a ferramenta de captura de tela do navegador (F12 > Screenshot) para capturar o mapa em alta qualidade")
             
             # Seção de ranking ao lado do mapa
             with col_ranking:
@@ -513,22 +503,21 @@ with map_col:
                 top_5_maior, top_5_menor = criar_ranking_sinergia(gdf_bairros_mancha, tipo_mancha)
                 
                 if top_5_maior is not None and not top_5_maior.empty:
-                    # Layout lado a lado para os rankings
-                    col_maior, col_menor = st.columns(2)
+                    # Top 5 Maior Sinergia
+                    st.markdown("**Top 5 Maior Sinergia**")
+                    for i, (_, row) in enumerate(top_5_maior.iterrows(), 1):
+                        coluna_ranking = 'Sinergia' if tipo_mancha == 'Apenas Sinergia' else 'Forca_Conjunta'
+                        valor = row[coluna_ranking]
+                        st.markdown(f"**{i}.** {row['nome']}<br><small>{valor:.1%}</small>", unsafe_allow_html=True)
                     
-                    with col_maior:
-                        st.markdown("**Top 5 Maior Sinergia**")
-                        for i, (_, row) in enumerate(top_5_maior.iterrows(), 1):
-                            coluna_ranking = 'Sinergia' if tipo_mancha == 'Apenas Sinergia' else 'Forca_Conjunta'
-                            valor = row[coluna_ranking]
-                            st.markdown(f"**{i}.** {row['nome']}<br><small>{valor:.1%}</small>", unsafe_allow_html=True)
+                    st.divider()
                     
-                    with col_menor:
-                        st.markdown("**Top 5 Menor Sinergia**")
-                        for i, (_, row) in enumerate(top_5_menor.iterrows(), 1):
-                            coluna_ranking = 'Sinergia' if tipo_mancha == 'Apenas Sinergia' else 'Forca_Conjunta'
-                            valor = row[coluna_ranking]
-                            st.markdown(f"**{i}.** {row['nome']}<br><small>{valor:.1%}</small>", unsafe_allow_html=True)
+                    # Top 5 Menor Sinergia
+                    st.markdown("**Top 5 Menor Sinergia**")
+                    for i, (_, row) in enumerate(top_5_menor.iterrows(), 1):
+                        coluna_ranking = 'Sinergia' if tipo_mancha == 'Apenas Sinergia' else 'Forca_Conjunta'
+                        valor = row[coluna_ranking]
+                        st.markdown(f"**{i}.** {row['nome']}<br><small>{valor:.1%}</small>", unsafe_allow_html=True)
                 else:
                     st.info("Nenhum dado disponível para ranking")
         
