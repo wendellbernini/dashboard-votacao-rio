@@ -1,6 +1,6 @@
 streamlit==1.39.0
 pandas==2.2.2
-geopandas==0.15.0
+geopandas==0.14.4
 pydeck==0.8.1b0
 numpy==1.26.4
 shapely==2.0.6
