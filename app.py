@@ -328,22 +328,18 @@ with map_col:
             st.pydeck_chart(pdk.Deck(layers=[polygon_layer, scatterplot_layer], initial_view_state=view_state, map_style=pdk.map_styles.CARTO_LIGHT, tooltip={"html": "{tooltip}"}))
 
             # Botões de exportação
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button("Exportar Dados (CSV)", key="export_csv_pontos"):
-                    export_data, timestamp = export_map_data(df_mapa, "Pontos", modo_analise)
-                    csv_data = export_data.to_csv(index=False, encoding='utf-8-sig')
-                    st.markdown(create_download_link(csv_data, f"dados_pontos_{timestamp}.csv", "csv"), unsafe_allow_html=True)
+            if st.button("Exportar Dados (CSV)", key="export_csv_pontos"):
+                export_data, timestamp = export_map_data(df_mapa, "Pontos", modo_analise)
+                csv_data = export_data.to_csv(index=False, encoding='utf-8-sig')
+                st.markdown(create_download_link(csv_data, f"dados_pontos_{timestamp}.csv", "csv"), unsafe_allow_html=True)
             
-            with col2:
-                if st.button("Exportar Dados (JSON)", key="export_json_pontos"):
-                    export_data, timestamp = export_map_data(df_mapa, "Pontos", modo_analise)
-                    json_data = export_data.to_json(orient='records', force_ascii=False, indent=2)
-                    st.markdown(create_download_link(json_data, f"dados_pontos_{timestamp}.json", "json"), unsafe_allow_html=True)
+            if st.button("Exportar Dados (JSON)", key="export_json_pontos"):
+                export_data, timestamp = export_map_data(df_mapa, "Pontos", modo_analise)
+                json_data = export_data.to_json(orient='records', force_ascii=False, indent=2)
+                st.markdown(create_download_link(json_data, f"dados_pontos_{timestamp}.json", "json"), unsafe_allow_html=True)
             
-            with col3:
-                if st.button("Salvar como PDF", key="export_pdf_pontos"):
-                    st.info("Use Ctrl+P no navegador para salvar o mapa como PDF")
+            if st.button("Salvar como PDF", key="export_pdf_pontos"):
+                st.info("Use Ctrl+P no navegador para salvar o mapa como PDF")
 
         elif tipo_visualizacao == "Mancha de Votos":
             # Layout com mapa e ranking lado a lado
